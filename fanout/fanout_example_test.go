@@ -23,8 +23,8 @@ func Example() {
 		return
 	}
 
-	// Start 10 goroutines that should receive everything that we send
-	// to it
+	// Start 10 goroutines that should receive everything that we receive
+	// from the source channel
 	for i := 0; i < 10; i++ {
 		ch := make(chan time.Time)
 		if err := rc.Add(ctx, ch); err != nil {
