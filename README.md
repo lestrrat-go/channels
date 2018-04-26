@@ -4,4 +4,4 @@ Channel patterns
 
 # Available Patterns
 
-* [./fanout](fanout)
+* [fanout](./fanout)
