@@ -2,7 +2,7 @@
 
 A generic fan-out pattern for Go
 
-[![GoDoc](https://godoc.org/github.com/lestrrat-go/channels/pipe?status.svg)](https://godoc.org/github.com/lestrrat-go/channels/pipe)
+[![GoDoc](https://godoc.org/github.com/lestrrat-go/channels/fanout?status.svg)](https://godoc.org/github.com/lestrrat-go/channels/fanout)
 
 # SYNOPSIS
 
