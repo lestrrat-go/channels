@@ -9,8 +9,10 @@ import (
 
 // Pipe creates a chain of channels, with an optional filter.
 // dst and src must be channels, where dst can be written to,
-// and src can be read from. They must both support the same
-// element types.
+// and src can be read from. They do not have to both support
+// the same element types, but if they do not match, and the
+// filter below does not do any translation, then the values
+// will be discarded
 //
 // f is an optional filter, which receives the data read from
 // src as reflect.Value. This function should return the value
@@ -36,16 +38,11 @@ func Pipe(ctx context.Context, dst, src interface{}, f FilterFunc) error {
 		return errors.Wrap(err, `invalid src`)
 	}
 
-	typ := dstrv.Type().Elem()
-	if typ != srcrv.Type().Elem() {
-		return errors.Errorf(`src channel must handle same element as dst (%s != %s)`, srcrv.Type().Elem(), typ)
-	}
-
 	// Make sure the channels have the correct send/recv direction
-	if dstrv.Type().ChanDir() & reflect.SendDir == 0 {
+	if dstrv.Type().ChanDir()&reflect.SendDir == 0 {
 		return errors.Errorf(`dst channel must allow sending data to it`)
 	}
-	if srcrv.Type().ChanDir() & reflect.RecvDir == 0 {
+	if srcrv.Type().ChanDir()&reflect.RecvDir == 0 {
 		return errors.Errorf(`dst channel must allow receiving data from it`)
 	}
 
@@ -54,6 +51,7 @@ func Pipe(ctx context.Context, dst, src interface{}, f FilterFunc) error {
 }
 
 var zeroval reflect.Value
+
 func chanRV(ch interface{}) (reflect.Value, error) {
 	if ch == nil {
 		return zeroval, errors.New(`channel is nil`)
@@ -100,7 +98,10 @@ func pipe(ctx context.Context, dst, src reflect.Value, f FilterFunc) error {
 				}
 			}
 
-			dst.Send(recv)
+			if dst.Type().Elem() == recv.Type() {
+				dst.Send(recv)
+			}
+
 		}
 	}
 	return nil
