@@ -14,7 +14,13 @@ import (
 // from reading from `src`. Each of the registered channels receive the
 // same data sent to `src`, in the order that was obtained.
 //
-// This pattern is generally called the "fan-out" pattern.
+// The behavior is a specialized case of fanout pattern, where the
+// fanout mechanism only acts as a multiplexer that sends identical
+// data to the recipients. In real life "fanout", you typicaly divide
+// tasks to the awaiting channels/queues such that you cna efficiently
+// a large task that has been divided into smaller components.
+// (Note: this beavior can be mimiced using this simple multiplexer
+// fanout as well)
 func Start(ctx context.Context, src interface{}) (*RemoteControl, error) {
 	chrv := reflect.ValueOf(src)
 	if !chrv.IsValid() || chrv.Kind() != reflect.Chan {
