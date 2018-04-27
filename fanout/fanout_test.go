@@ -30,7 +30,32 @@ func TestConstructor(t *testing.T) {
 	})
 }
 
-func TestFanout(t *testing.T) {
+func TestFanoutCloseSource(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	ch := make(chan int)
+
+	rc, err := fanout.Start(ctx, ch)
+	if !assert.NoError(t, err, `fanout.Start should succeed`) {
+		return
+	}
+
+	time.AfterFunc(10*time.Millisecond, func() {
+		close(ch)
+	})
+
+	select {
+	case <-ctx.Done():
+		t.Errorf(`context canceled before detecting workers exited: %s`, ctx.Err())
+	case <-rc.Done():
+		if !assert.Error(t, rc.Err(), `err should not be empty`) {
+			return
+		}
+	}
+}
+
+func TestFanout(t *testing.T) { 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -98,6 +123,9 @@ func TestFanout(t *testing.T) {
 	select {
 	case <-ctx.Done():
 		t.Errorf(`context canceled before detecting workers exited: %s`, ctx.Err())
+	case <-rc.Done():
+		// bailed out of loop somehow?
+		t.Errorf(`unexpected end of fanout: %s`, rc.Err())
 	case <-done:
 	}
 }

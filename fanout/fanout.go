@@ -2,10 +2,10 @@ package fanout
 
 import (
 	"context"
-	"log"
 	"reflect"
 	"sync"
 
+	"github.com/lestrrat-go/channels/pipe"
 	"github.com/pkg/errors"
 )
 
@@ -34,16 +34,46 @@ func Start(ctx context.Context, src interface{}) (*RemoteControl, error) {
 	m.removeCh = make(chan interface{})
 	m.cond = sync.NewCond(&sync.Mutex{})
 
-	go m.receive(ctx, chrv)
-	go m.fanout(ctx)
+	errCh := make(chan error, 1)
 
+	go func() {
+		errCh <- m.receive(ctx, chrv)
+	}()
+
+	go func() {
+		errCh <- m.fanout(ctx)
+	}()
+
+	doneCh := make(chan struct{})
 	ctrl := &RemoteControl{
 		chType:   chrv.Type().Elem(), // Used to validate arguments to Add()
-		addCh:    m.addCh,     // Used to send channels to be added
-		removeCh: m.removeCh,  // Used to send channels to be removed
+		addCh:    m.addCh,            // Used to send channels to be added
+		removeCh: m.removeCh,         // Used to send channels to be removed
+		errCh:    errCh,              // Used to check if we have any errors
+		doneCh:   doneCh,             // Used to check if the fanout goroutines have stopped
 	}
 
+	pipe.Pipe(ctx, doneCh, errCh, func(rv reflect.Value) (reflect.Value, bool) {
+		ctrl.mu.Lock()
+		if ctrl.err == nil {
+			ctrl.err = rv.Interface().(error)
+			close(doneCh)
+		}
+		ctrl.mu.Unlock()
+		return rv, false
+	})
+
 	return ctrl, nil
+}
+
+func (c *RemoteControl) Err() error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.err
+}
+
+func (c *RemoteControl) Done() <-chan struct{} {
+	return c.doneCh
 }
 
 func (m *minion) receive(ctx context.Context, src reflect.Value) error {
@@ -191,17 +221,17 @@ func (c *RemoteControl) Remove(ctx context.Context, ch interface{}) error {
 	return nil
 }
 
-func (m *minion) fanout(ctx context.Context) {
+func (m *minion) fanout(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		default:
 		}
 
 		// Wait until there's something to be done
 		if err := m.waitPending(ctx); err != nil {
-			return
+			return errors.Wrap(err, `failed while waiting for pending data`)
 		}
 
 		// Keep popping until we have nothing to process
@@ -214,6 +244,7 @@ func (m *minion) fanout(ctx context.Context) {
 			m.sendValue(ctx, v)
 		}
 	}
+	return nil
 }
 
 func (m *minion) sendValue(ctx context.Context, v reflect.Value) error {
@@ -237,7 +268,7 @@ func (m *minion) sendValue(ctx context.Context, v reflect.Value) error {
 		// important when we are attempting to send to the (possibly)
 		// defunct channel, so we need to include it in this select
 		cases[fanoutCaseRemove] = reflect.SelectCase{
-			Dir: reflect.SelectRecv,
+			Dir:  reflect.SelectRecv,
 			Chan: reflect.ValueOf(m.notifyRemovalCh),
 		}
 

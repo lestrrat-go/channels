@@ -27,8 +27,12 @@ const (
 // can be controlled via the context.Context object passed to fanout.Start()
 type RemoteControl struct {
 	addCh    chan interface{}
-	removeCh chan interface{}
 	chType   reflect.Type
+	doneCh   chan struct{}
+	err      error
+	errCh    chan error
+	mu       sync.RWMutex
+	removeCh chan interface{}
 }
 
 // minion is the real work horse behind this pattern, but is not exposed
