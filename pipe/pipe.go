@@ -67,7 +67,16 @@ func chanRV(ch interface{}) (reflect.Value, error) {
 
 func pipe(ctx context.Context, dst, src reflect.Value, f FilterFunc) error {
 	// when we bail out of this loop, we need to close the channel
-	defer dst.Close()
+	defer func() {
+		chosen, _, _ := reflect.Select([]reflect.SelectCase{
+			{Dir: reflect.SelectRecv, Chan: dst},
+			{Dir: reflect.SelectDefault},
+		})
+
+		if chosen != 0 {
+			dst.Close()
+		}
+	}()
 
 	cases := make([]reflect.SelectCase, receiveCaseMax)
 	cases[receiveCaseDone] = reflect.SelectCase{
